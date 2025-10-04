@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRPD Feedback - Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .stat-card { transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-5px); }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <!-- Header -->
+        <header class="bg-white shadow-md rounded-lg p-6 mb-8">
+            <h1 class="text-3xl font-bold text-slate-900">CRPD Feedback Dashboard</h1>
+            <p class="text-slate-500 mt-1">Administrative overview of community feedback.</p>
+        </header>
+
+        <!-- Stats Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="stat-card bg-white shadow-md rounded-lg p-6">
+                <h2 class="text-slate-500 text-sm font-medium">Total Officers</h2>
+                <p id="total-officers" class="text-3xl font-bold text-blue-600 mt-1">--</p>
+            </div>
+            <div class="stat-card bg-white shadow-md rounded-lg p-6">
+                <h2 class="text-slate-500 text-sm font-medium">Total Feedback Submitted</h2>
+                <p id="total-feedback" class="text-3xl font-bold text-green-600 mt-1">--</p>
+            </div>
+            <div class="stat-card bg-white shadow-md rounded-lg p-6">
+                <h2 class="text-slate-500 text-sm font-medium">Overall Average Rating</h2>
+                <p id="average-rating" class="text-3xl font-bold text-amber-500 mt-1">--</p>
+            </div>
+        </div>
+
+        <!-- Main Content: Officer List -->
+        <main id="officer-list-view" class="bg-white shadow-md rounded-lg overflow-hidden">
+             <div class="p-6">
+                <h2 class="text-xl font-semibold text-slate-900">Officer Feedback Summary</h2>
+                <p class="text-slate-500 mt-1">Click on an officer to view detailed feedback.</p>
+            </div>
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Officer Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Job Title</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Feedback Count</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Average Rating</th>
+                    </tr>
+                </thead>
+                <tbody id="officer-table-body" class="bg-white divide-y divide-slate-200">
+                    <!-- Officer rows will be injected here -->
+                    <tr><td colspan="4" class="text-center p-8 text-slate-500">Loading officer data...</td></tr>
+                </tbody>
+            </table>
+        </main>
+
+        <!-- Detail View (Initially Hidden) -->
+        <div id="officer-detail-view" class="hidden">
+            <button id="back-button" class="mb-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+                &larr; Back to Officer List
+            </button>
+            <div class="bg-white shadow-md rounded-lg p-6">
+                <h2 id="detail-officer-name" class="text-2xl font-bold text-slate-900"></h2>
+                <p id="detail-officer-title" class="text-slate-500"></p>
+                <div id="feedback-container" class="mt-6 space-y-4">
+                    <!-- Detailed feedback will be injected here -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api';
+
+        const officerListView = document.getElementById('officer-list-view');
+        const officerDetailView = document.getElementById('officer-detail-view');
+        const backButton = document.getElementById('back-button');
+
+        // Function to fetch all officer data and calculate stats
+        async function loadDashboard() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/officers`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const officers = await response.json();
+
+                // Calculate stats
+                const totalOfficers = officers.length;
+                const totalFeedback = officers.reduce((sum, officer) => sum + officer.feedback_count, 0);
+                const totalRatingSum = officers.reduce((sum, officer) => sum + (officer.average_rating * officer.feedback_count), 0);
+                const averageRating = totalFeedback > 0 ? (totalRatingSum / totalFeedback).toFixed(2) : 'N/A';
+
+                // Update stat cards
+                document.getElementById('total-officers').textContent = totalOfficers;
+                document.getElementById('total-feedback').textContent = totalFeedback;
+                document.getElementById('average-rating').textContent = averageRating;
+
+                // Populate officer table
+                const tableBody = document.getElementById('officer-table-body');
+                tableBody.innerHTML = ''; // Clear loading state
+                if(officers.length === 0){
+                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-8 text-slate-500">No officers found in the database.</td></tr>';
+                    return;
+                }
+                officers.forEach(officer => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-slate-50 cursor-pointer';
+                    row.onclick = () => showOfficerDetails(officer.id);
+                    
+                    const ratingColor = officer.average_rating >= 4 ? 'text-green-600' : officer.average_rating >= 3 ? 'text-amber-500' : 'text-red-600';
+
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-slate-900">${officer.first_name} ${officer.last_name}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-slate-500">${officer.job_title}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <span class="text-sm text-slate-900">${officer.feedback_count}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                             <span class="text-sm font-bold ${ratingColor}">${officer.average_rating.toFixed(2)} ★</span>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+                document.getElementById('officer-table-body').innerHTML = '<tr><td colspan="4" class="text-center p-8 text-red-500">Failed to load data. Is the server running?</td></tr>';
+            }
+        }
+
+        // Function to show the detailed view for a single officer
+        async function showOfficerDetails(officerId) {
+            try {
+                // Fetch officer details
+                const officerRes = await fetch(`${API_BASE_URL}/officers`);
+                const officers = await officerRes.json();
+                const officer = officers.find(o => o.id === officerId);
+
+                // Fetch feedback for this officer
+                const feedbackRes = await fetch(`${API_BASE_URL}/officers/${officerId}/feedback`);
+                const feedbacks = await feedbackRes.json();
+                
+                document.getElementById('detail-officer-name').textContent = `${officer.first_name} ${officer.last_name}`;
+                document.getElementById('detail-officer-title').textContent = officer.job_title;
+
+                const feedbackContainer = document.getElementById('feedback-container');
+                feedbackContainer.innerHTML = '<h3 class="text-lg font-semibold text-slate-700 border-b pb-2 mb-4">Submitted Feedback</h3>'; // Clear previous
+
+                if (feedbacks.length === 0) {
+                    feedbackContainer.innerHTML += '<p class="text-slate-500">No feedback has been submitted for this officer.</p>';
+                } else {
+                    feedbacks.forEach(fb => {
+                        const feedbackCard = document.createElement('div');
+                        feedbackCard.className = 'p-4 border rounded-md bg-slate-50';
+                        const stars = '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating);
+                        const date = new Date(fb.created_at).toLocaleString();
+
+                        feedbackCard.innerHTML = `
+                            <div class="flex justify-between items-center mb-2">
+                                <p class="text-amber-500 font-bold">${stars}</p>
+                                <p class="text-xs text-slate-400">${date}</p>
+                            </div>
+                            <p class="text-slate-700 italic">"${fb.feedback_text || 'No comment provided.'}"</p>
+                        `;
+                        feedbackContainer.appendChild(feedbackCard);
+                    });
+                }
+
+
+                officerListView.classList.add('hidden');
+                officerDetailView.classList.remove('hidden');
+
+            } catch (error) {
+                 console.error('Failed to load officer details:', error);
+                 alert('Could not load details. Please try again.');
+            }
+        }
+
+        // Event listener for the back button
+        backButton.addEventListener('click', () => {
+            officerDetailView.classList.add('hidden');
+            officerListView.classList.remove('hidden');
+        });
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadDashboard);
+    </script>
+</body>
+</html>
